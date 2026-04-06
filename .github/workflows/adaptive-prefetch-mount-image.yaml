@@ -11,15 +11,6 @@ on:
         description: "juicefs git ref to build"
         required: false
         type: string
-  push:
-    branches:
-      - master
-    paths:
-      - ".github/workflows/adaptive-prefetch-mount-image.yaml"
-      - "docker/ce.juicefs.Dockerfile"
-      - "docker/Makefile"
-  schedule:
-    - cron: "0 3 * * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
