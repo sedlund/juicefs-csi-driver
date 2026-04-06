@@ -1,0 +1,88 @@
+name: build adaptive prefetch mount image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "custom tag suffix for ghcr.io/sedlund/mount"
+        required: false
+        type: string
+      juicefs_repo_ref:
+        description: "juicefs git ref to build"
+        required: false
+        type: string
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/adaptive-prefetch-mount-image.yaml"
+      - "docker/ce.juicefs.Dockerfile"
+      - "docker/Makefile"
+  schedule:
+    - cron: "0 3 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/sedlund/mount
+  DEFAULT_IMAGE_TAG: adaptive-prefetch-streaming
+  DEFAULT_JUICEFS_REPO_URL: https://github.com/sedlund/juicefs
+  DEFAULT_JUICEFS_REPO_REF: sedlund/adaptive-prefetch-streaming
+
+jobs:
+  publish-ce-mount-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve build settings
+        run: |
+          image_tag="${{ inputs.image_tag }}"
+          if [ -z "$image_tag" ]; then
+            image_tag="${DEFAULT_IMAGE_TAG}"
+          fi
+
+          juicefs_repo_ref="${{ inputs.juicefs_repo_ref }}"
+          if [ -z "$juicefs_repo_ref" ]; then
+            juicefs_repo_ref="${DEFAULT_JUICEFS_REPO_REF}"
+          fi
+
+          echo "IMAGE_TAG=$image_tag" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG_CE=ce-$image_tag" >> "$GITHUB_ENV"
+          echo "JUICEFS_REPO_REF=$juicefs_repo_ref" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push juicefs mount image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker
+          file: ./docker/ce.juicefs.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG_CE }}
+          build-args: |
+            JUICEFS_REPO_URL=${{ env.DEFAULT_JUICEFS_REPO_URL }}
+            JUICEFS_REPO_BRANCH=${{ env.JUICEFS_REPO_REF }}
+            JUICEFS_REPO_REF=${{ env.JUICEFS_REPO_REF }}
+
+      - name: Result
+        run: |
+          echo "Published ${IMAGE_NAME}:${IMAGE_TAG}"
+          echo "Published ${IMAGE_NAME}:${IMAGE_TAG_CE}"
